@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C10 | Interactive Decision Dashboard</title>
+<style>
+:root{--navy:#14213d;--blue:#2563eb;--pale:#eff6ff;--ink:#172033;--muted:#64748b;--line:#dbe3ee;--bg:#f5f7fb;--green:#15803d;--red:#b91c1c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+header{background:linear-gradient(120deg,#14213d,#244b83);color:white;padding:28px max(20px,calc((100% - 1180px)/2))}
+header h1{margin:0 0 5px;font-size:clamp(24px,4vw,34px)}header p{margin:0;color:#dbeafe}
+main{max-width:1180px;margin:24px auto;padding:0 18px 50px}.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:20px;margin:0 0 18px;box-shadow:0 3px 12px #17203308}
+h2{font-size:20px;margin:0 0 14px;color:var(--navy)}h3{font-size:16px;margin:0 0 10px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.toolbar label{font-weight:650}
+button,select,input{font:inherit}button{border:0;border-radius:8px;padding:9px 13px;background:var(--blue);color:white;cursor:pointer;font-weight:650}
+button.secondary{background:#e8eef8;color:#1e3a5f}button.danger{background:#fee2e2;color:#991b1b}button:focus,input:focus,select:focus{outline:3px solid #93c5fd;outline-offset:1px}
+select,input{border:1px solid #cbd5e1;border-radius:7px;padding:8px;background:white;color:var(--ink)}input[type=number]{width:100px}
+.small{font-size:13px;color:var(--muted)}.status{padding:10px 12px;border-radius:8px;background:var(--pale);color:#1e40af;margin-top:12px}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:620px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:center}th{background:#f1f5f9;color:#334155;font-size:13px}td:first-child,th:first-child{text-align:left}td input{max-width:110px}
+.name-input{min-width:130px}.prob-input{width:90px}.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.metric{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff}.metric .method{font-weight:750;color:#1e3a5f}.metric .value{font-size:24px;font-weight:800;margin:5px 0}.winner{color:var(--green);font-weight:700}.muted{color:var(--muted)}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.step{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fbfdff}.step strong{display:block;color:#1d4ed8;margin-bottom:5px}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.node{padding:10px 13px;border:1px solid #93c5fd;background:#eff6ff;border-radius:9px;font-weight:650}.arrow{color:#64748b;font-size:22px}.node.final{background:#dcfce7;border-color:#86efac;color:#166534}
+.notice{font-size:13px;color:var(--muted);margin-top:8px}.error{color:var(--red);font-weight:650}.footer{color:var(--muted);text-align:center;font-size:13px;padding:12px}
+a{color:#1d4ed8}.pill{display:inline-block;border-radius:99px;padding:3px 8px;background:#dcfce7;color:#166534;font-size:12px;font-weight:700}
+@media(max-width:600px){.panel{padding:14px}header{padding:22px 18px}.toolbar>*{max-width:100%}}
+</style>
+</head>
+<body>
+<header><h1>C10 Interactive Decision Dashboard</h1><p>Decision-making under uncertainty · Grade 10 · Term 1 · Tomás Rincón 10C</p></header>
+<main>
+<section class="panel">
+<h2>1. Choose a decision problem</h2>
+<div class="toolbar">
+<label for="example">Preloaded example:</label>
+<select id="example"><option value="factory">Factory investment</option><option value="festival">Outdoor festival</option><option value="custom">My own problem</option></select>
+<button class="secondary" id="reset">Reset selected example</button>
+</div>
+<p class="small">Select an example or build your own decision problem. All results update automatically when values change.</p>
+<div id="validation" class="status" role="status">Ready. Payoffs are interpreted as profits/benefits, so higher values are better.</div>
+</section>
+
+<section class="panel">
+<h2>2. Decision model</h2>
+<div class="toolbar" style="margin-bottom:14px">
+<button id="addAlt">+ Add alternative</button><button class="secondary" id="addState">+ Add state of nature</button>
+</div>
+<div class="table-wrap"><table id="decisionTable" aria-label="Payoff table"></table></div>
+<p class="notice">Edit alternative names, state names, payoffs, and probabilities directly in the table. Probabilities must be between 0 and 1 and add up to 1. Use decimal notation (for example, 0.25 = 25%).</p>
+</section>
+
+<section class="panel">
+<h2>3. Decision criteria</h2>
+<div id="criteria" class="metric-grid"></div>
+<p class="notice">Maximax chooses the highest possible payoff. Maximin chooses the best worst-case payoff. Minimax Regret minimizes the maximum opportunity loss. EMV/Bayes chooses the highest probability-weighted expected payoff.</p>
+</section>
+
+<section class="panel">
+<h2>4. Staged filtering</h2>
+<p class="small">This dashboard uses a transparent three-stage filter: (1) remove alternatives that are not optimal under Maximax; (2) among survivors, keep those with the highest Maximin; (3) among survivors, keep those with the highest EMV. Ties are retained at every stage.</p>
+<div id="filterSteps" class="steps"></div>
+<div class="notice" id="filterSummary"></div>
+</section>
+
+<section class="panel">
+<h2>5. Staged-filtering flow diagram</h2>
+<div id="flow" class="flow" aria-live="polite"></div>
+<p class="notice">The final box shows the alternative(s) remaining after all three filters. If several alternatives tie, all are retained.</p>
+</section>
+
+<section class="panel">
+<h2>6. AI development record</h2>
+<p>Include a visible link to the AI conversation used to develop this webpage. Before publishing, replace the placeholder below with the share link to your ChatGPT conversation.</p>
+<p><a id="aiLink" href="https://chatgpt.com/share/6aeb31a8-35f8-83e9-bff3-7d2a0697b522" target="_blank" rel="noopener">Open AI development conversation Hyperlink</a></p>
+
+</section>
+<div class="footer">C10 Practice · Interactive Decision Dashboard · All calculations run in your browser.</div>
+</main>
+<script>
+const examples={
+ factory:{alts:["Build a small plant","Build a large plant","Do nothing"],states:["High demand","Low demand","Stable demand"],payoffs:[[90,-30,35],[150,-100,55],[0,0,0]],probs:[0.4,0.3,0.3]},
+ festival:{alts:["Outdoor venue","Indoor venue","Hybrid venue"],states:["Sunny","Rainy","Stormy"],payoffs:[[80,-40,-100],[45,40,20],[65,25,-10]],probs:[0.5,0.3,0.2]}
+};
+let model=structuredClone(examples.factory);
+const $=id=>document.getElementById(id);
+const clone=o=>JSON.parse(JSON.stringify(o));
+function setExample(key){if(key==="custom"){model={alts:["Alternative 1","Alternative 2"],states:["State 1","State 2"],payoffs:[[0,0],[0,0]],probs:[0.5,0.5]};}else model=clone(examples[key]);render();}
+function render(){renderTable();calculate();}
+function renderTable(){
+ let t='<thead><tr><th>Alternative / state</th>'+model.states.map((s,j)=>`<th><input class="name-input" aria-label="State ${j+1} name" value="${esc(s)}" data-state="${j}"><br><button class="danger" data-delstate="${j}" style="margin-top:5px;padding:4px 7px;font-size:11px">Remove</button></th>`).join('')+'<th>Action</th></tr></thead><tbody>';
+ t+='<tr><th>Probability</th>'+model.probs.map((p,j)=>`<td><input class="prob-input" type="number" min="0" max="1" step="0.01" value="${p}" data-prob="${j}" aria-label="Probability for ${esc(model.states[j])}"></td>`).join('')+'<td class="small">Total: <strong id="probTotal">${sum(model.probs).toFixed(2)}</strong></td></tr>';
+ model.alts.forEach((a,i)=>{t+=`<tr><td><input class="name-input" value="${esc(a)}" data-alt="${i}" aria-label="Alternative ${i+1} name"></td>`+model.states.map((s,j)=>`<td><input type="number" step="any" value="${model.payoffs[i][j]}" data-pay="${i},${j}" aria-label="Payoff ${esc(a)} / ${esc(s)}"></td>`).join('')+`<td><button class="danger" data-delalt="${i}" style="padding:5px 8px">Remove</button></td></tr>`;});
+ t+='</tbody>'; $('decisionTable').innerHTML=t;
+ $('decisionTable').querySelectorAll('[data-state]').forEach(el=>el.onchange=()=>{model.states[+el.dataset.state]=el.value||`State ${+el.dataset.state+1}`;render();});
+ $('decisionTable').querySelectorAll('[data-alt]').forEach(el=>el.onchange=()=>{model.alts[+el.dataset.alt]=el.value||`Alternative ${+el.dataset.alt+1}`;render();});
+ $('decisionTable').querySelectorAll('[data-prob]').forEach(el=>el.onchange=()=>{model.probs[+el.dataset.prob]=Number(el.value);calculate();$('probTotal').textContent=sum(model.probs).toFixed(2);});
+ $('decisionTable').querySelectorAll('[data-pay]').forEach(el=>el.onchange=()=>{let [i,j]=el.dataset.pay.split(',').map(Number);model.payoffs[i][j]=Number(el.value);calculate();});
+ $('decisionTable').querySelectorAll('[data-delalt]').forEach(el=>el.onclick=()=>{if(model.alts.length<=1)return alert('At least one alternative is required.');let i=+el.dataset.delalt;model.alts.splice(i,1);model.payoffs.splice(i,1);render();});
+ $('decisionTable').querySelectorAll('[data-delstate]').forEach(el=>el.onclick=()=>{if(model.states.length<=1)return alert('At least one state of nature is required.');let j=+el.dataset.delstate;model.states.splice(j,1);model.probs.splice(j,1);model.payoffs.forEach(r=>r.splice(j,1));render();});
+}
+function sum(a){return a.reduce((x,y)=>x+y,0)}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmt(x){return Number.isFinite(x)?x.toFixed(2):'—'}
+function names(indices){return indices.map(i=>esc(model.alts[i])).join(', ')}
+function bestIndices(vals,max=true){let target=max?Math.max(...vals):Math.min(...vals);return vals.map((v,i)=>Math.abs(v-target)<1e-9?i:-1).filter(i=>i>=0)}
+function calculate(){
+ const n=model.alts.length,m=model.states.length, p=model.probs;
+ const valid=p.every(x=>Number.isFinite(x)&&x>=0&&x<=1)&&Math.abs(sum(p)-1)<1e-6;
+ const payOK=model.payoffs.every(r=>r.length===m&&r.every(Number.isFinite));
+ $('validation').innerHTML=valid?'<span class="pill">Probabilities valid</span> Total probability = 1.00.':`<span class="error">Invalid probabilities:</span> current total is ${fmt(sum(p))}. Enter values from 0 to 1 that add up to exactly 1.`;
+ if(!payOK){$('validation').innerHTML+='<br><span class="error">Check payoff entries.</span>';return;}
+ const rowMax=model.payoffs.map(r=>Math.max(...r)),rowMin=model.payoffs.map(r=>Math.min(...r));
+ const colMax=Array.from({length:m},(_,j)=>Math.max(...model.payoffs.map(r=>r[j])));
+ const regrets=model.payoffs.map(r=>r.map((v,j)=>colMax[j]-v));
+ const maxRegret=regrets.map(r=>Math.max(...r));
+ const emv=model.payoffs.map(r=>valid?sum(r.map((v,j)=>v*p[j])):NaN);
+ const mx=bestIndices(rowMax),mn=bestIndices(rowMin),mr=bestIndices(maxRegret,false),ev=valid?bestIndices(emv):[];
+ const cards=[
+ ['Maximax',Math.max(...rowMax),mx,'Highest possible payoff'],
+ ['Maximin',Math.max(...rowMin),mn,'Highest minimum payoff'],
+ ['Minimax Regret',Math.min(...maxRegret),mr,'Lowest maximum regret'],
+ ['EMV / Bayes',valid?Math.max(...emv):NaN,ev,'Highest expected monetary value']
+ ];
+ $('criteria').innerHTML=cards.map(([name,val,idx,desc])=>`<div class="metric"><div class="method">${name}</div><div class="value">${fmt(val)}</div><div class="winner">${idx.length?names(idx):'—'}</div><div class="small">${desc}</div></div>`).join('');
+ // Sequential staged filter: Maximax, then Maximin, then EMV.
+ let s1=mx, v1=s1.map(i=>rowMin[i]), max1=Math.max(...v1);let s2=s1.filter(i=>Math.abs(rowMin[i]-max1)<1e-9);
+ let s3=s2, final=s3;
+ if(valid){let max2=Math.max(...s2.map(i=>emv[i]));final=s2.filter(i=>Math.abs(emv[i]-max2)<1e-9);}
+ $('filterSteps').innerHTML=[
+ ['Start',model.alts.map((a,i)=>i),'All available alternatives'],
+ ['Stage 1 · Maximax',s1,'Keep the highest row maximum'],
+ ['Stage 2 · Maximin',s2,'From Stage 1, keep the highest row minimum'],
+ ['Stage 3 · EMV/Bayes',final,'From Stage 2, keep the highest EMV']
+ ].map(([title,idx,desc])=>`<div class="step"><strong>${title}</strong><div>${idx.length?names(idx):'None'}</div><div class="small">${desc}</div></div>`).join('');
+ $('filterSummary').textContent=valid?`Final recommendation: ${final.length?model.alts.filter((a,i)=>final.includes(i)).join(', '):'No alternative'}${final.length>1?' (tie)':''}.`:'EMV stage and final recommendation are pending valid probabilities.';
+ const flowNames=idx=>idx.length?model.alts.filter((a,i)=>idx.includes(i)).map(esc).join(' / '):'None';
+ $('flow').innerHTML=`<div class="node">All alternatives<br><span class="small">${flowNames(model.alts.map((a,i)=>i))}</span></div><span class="arrow">→</span><div class="node">Maximax<br><span class="small">${flowNames(s1)}</span></div><span class="arrow">→</span><div class="node">Maximin<br><span class="small">${flowNames(s2)}</span></div><span class="arrow">→</span><div class="node">EMV / Bayes<br><span class="small">${valid?flowNames(final):'Waiting for valid probabilities'}</span></div><span class="arrow">→</span><div class="node final">Final outcome<br>${valid?flowNames(final):'Pending'}</div>`;
+}
+$('example').onchange=e=>setExample(e.target.value);
+$('reset').onclick=()=>setExample($('example').value==='custom'?'custom':$('example').value);
+$('addAlt').onclick=()=>{let k=model.alts.length+1;model.alts.push(`Alternative ${k}`);model.payoffs.push(model.states.map(()=>0));render();};
+$('addState').onclick=()=>{let k=model.states.length+1;model.states.push(`State ${k}`);model.probs.push(0);model.payoffs.forEach(r=>r.push(0));render();};
+// Hyperlink uses the direct ChatGPT share URL; no click handler blocks navigation.
+render();
+</script>
+</body></html>
